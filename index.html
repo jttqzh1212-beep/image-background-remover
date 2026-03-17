@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Background Remover</title>
+<style>
+:root {
+  --bg: #0f0f1a;
+  --panel: #1a1a2e;
+  --border: #2a2a4a;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --success: #34d399;
+  --error: #f87171;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* Header */
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+}
+header .logo { font-size: 1.5rem; }
+header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; }
+header p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+/* Main */
+main {
+  max-width: 960px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  padding: 60px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--panel);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: #1e1e3a;
+}
+.upload-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.upload-icon { font-size: 3rem; margin-bottom: 12px; }
+.upload-zone h2 { font-size: 1.1rem; margin-bottom: 8px; }
+.upload-zone p { color: var(--muted); font-size: 0.85rem; }
+
+/* Preview area */
+.preview-area {
+  display: none;
+  gap: 20px;
+  margin-top: 30px;
+}
+.preview-area.visible { display: grid; grid-template-columns: 1fr 1fr; }
+@media (max-width: 600px) { .preview-area.visible { grid-template-columns: 1fr; } }
+
+.preview-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.preview-card .card-header {
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-card .card-body {
+  padding: 16px;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-card img {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+/* Checkerboard for transparent bg */
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, #333 25%, transparent 25%),
+    linear-gradient(-45deg, #333 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #333 75%),
+    linear-gradient(-45deg, transparent 75%, #333 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  border-radius: 8px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text { color: var(--muted); font-size: 0.9rem; margin-top: 12px; text-align: center; }
+
+/* Actions */
+.actions {
+  display: none;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.actions.visible { display: flex; }
+
+.btn {
+  padding: 10px 22px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); }
+
+/* Background options */
+.bg-options {
+  display: none;
+  margin-top: 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.bg-options.visible { display: block; }
+.bg-options h3 { font-size: 0.9rem; color: var(--muted); margin-bottom: 12px; }
+.bg-options-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.color-swatch {
+  width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+  border: 2px solid transparent; transition: border-color 0.15s;
+}
+.color-swatch:hover, .color-swatch.active { border-color: var(--accent); }
+.color-swatch.transparent-swatch {
+  background-image:
+    linear-gradient(45deg, #555 25%, transparent 25%),
+    linear-gradient(-45deg, #555 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #555 75%),
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+/* Error / status */
+.status-bar {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  display: none;
+}
+.status-bar.visible { display: block; }
+.status-bar.error { background: #2a1a1a; border: 1px solid #5a2a2a; color: var(--error); }
+.status-bar.success { background: #1a2a1a; border: 1px solid #2a5a2a; color: var(--success); }
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 30px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+  margin-top: 60px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✂️</div>
+  <div>
+    <h1>Background Remover</h1>
+    <p>Powered by remove.bg · Free to use</p>
+  </div>
+</header>
+
+<main>
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp">
+    <div class="upload-icon">🖼️</div>
+    <h2>拖拽图片到这里，或点击选择</h2>
+    <p>支持 JPG、PNG、WebP · 最大 12MB</p>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- Preview -->
+  <div class="preview-area" id="previewArea">
+    <div class="preview-card">
+      <div class="card-header">📷 原图</div>
+      <div class="card-body">
+        <img id="originalImg" src="" alt="原图">
+      </div>
+    </div>
+    <div class="preview-card">
+      <div class="card-header">✨ 去背景结果</div>
+      <div class="card-body" id="resultBody">
+        <div style="text-align:center;color:var(--muted)">
+          <div style="font-size:2rem;margin-bottom:8px">⬆️</div>
+          点击"去除背景"开始处理
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions" id="actions">
+    <button class="btn btn-primary" id="removeBtn">✂️ 去除背景</button>
+    <button class="btn btn-secondary" id="downloadBtn" style="display:none">⬇️ 下载 PNG</button>
+    <button class="btn btn-ghost" id="resetBtn">🔄 重新上传</button>
+  </div>
+
+  <!-- Background options -->
+  <div class="bg-options" id="bgOptions">
+    <h3>预览背景</h3>
+    <div class="bg-options-row">
+      <div class="color-swatch transparent-swatch active" data-color="transparent" title="透明"></div>
+      <div class="color-swatch" style="background:#ffffff" data-color="#ffffff" title="白色"></div>
+      <div class="color-swatch" style="background:#000000" data-color="#000000" title="黑色"></div>
+      <div class="color-swatch" style="background:#f87171" data-color="#f87171" title="红色"></div>
+      <div class="color-swatch" style="background:#60a5fa" data-color="#60a5fa" title="蓝色"></div>
+      <div class="color-swatch" style="background:#34d399" data-color="#34d399" title="绿色"></div>
+      <div class="color-swatch" style="background:#fbbf24" data-color="#fbbf24" title="黄色"></div>
+      <input type="color" id="customColor" title="自定义颜色"
+        style="width:32px;height:32px;border-radius:6px;border:2px solid var(--border);cursor:pointer;padding:2px;background:var(--panel)">
+    </div>
+  </div>
+</main>
+
+<footer>
+  Image Background Remover · Powered by <a href="https://remove.bg" style="color:var(--accent)">remove.bg</a>
+</footer>
+
+<script>
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+const previewArea = document.getElementById('previewArea');
+const originalImg = document.getElementById('originalImg');
+const resultBody  = document.getElementById('resultBody');
+const actions     = document.getElementById('actions');
+const removeBtn   = document.getElementById('removeBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const resetBtn    = document.getElementById('resetBtn');
+const bgOptions   = document.getElementById('bgOptions');
+const statusBar   = document.getElementById('statusBar');
+
+let currentFile = null;
+let resultBlob  = null;
+let currentBgColor = 'transparent';
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+// ── Paste ─────────────────────────────────────────────────────────────────────
+document.addEventListener('paste', e => {
+  const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+  if (item) handleFile(item.getAsFile());
+});
+
+// ── File input ────────────────────────────────────────────────────────────────
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  if (!file.type.match(/image\/(jpeg|png|webp)/)) {
+    showStatus('error', '仅支持 JPG、PNG、WebP 格式');
+    return;
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    showStatus('error', '文件大小不能超过 12MB');
+    return;
+  }
+  currentFile = file;
+  resultBlob  = null;
+  hideStatus();
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    originalImg.src = e.target.result;
+    previewArea.classList.add('visible');
+    actions.classList.add('visible');
+    downloadBtn.style.display = 'none';
+    bgOptions.classList.remove('visible');
+    resultBody.innerHTML = `<div style="text-align:center;color:var(--muted)">
+      <div style="font-size:2rem;margin-bottom:8px">⬆️</div>点击"去除背景"开始处理</div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Remove background ─────────────────────────────────────────────────────────
+removeBtn.addEventListener('click', async () => {
+  if (!currentFile) return;
+
+  removeBtn.disabled = true;
+  removeBtn.textContent = '处理中…';
+  resultBody.innerHTML = `<div style="text-align:center">
+    <div class="spinner" style="margin:0 auto"></div>
+    <div class="loading-text">正在去除背景，请稍候…</div>
+  </div>`;
+  hideStatus();
+
+  try {
+    const fd = new FormData();
+    fd.append('image_file', currentFile);
+
+    const res = await fetch('/api/remove-bg', { method: 'POST', body: fd });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `请求失败 (${res.status})`);
+    }
+
+    resultBlob = await res.blob();
+    const url  = URL.createObjectURL(resultBlob);
+    renderResult(url, currentBgColor);
+    downloadBtn.style.display = '';
+    bgOptions.classList.add('visible');
+    showStatus('success', '✅ 背景去除成功！');
+  } catch (err) {
+    resultBody.innerHTML = `<div style="text-align:center;color:var(--error)">
+      <div style="font-size:2rem;margin-bottom:8px">❌</div>${err.message}</div>`;
+    showStatus('error', err.message);
+  } finally {
+    removeBtn.disabled = false;
+    removeBtn.textContent = '✂️ 去除背景';
+  }
+});
+
+// ── Render result with background ─────────────────────────────────────────────
+function renderResult(url, bgColor) {
+  if (bgColor === 'transparent') {
+    resultBody.innerHTML = `<div class="checkerboard"><img src="${url}" style="max-width:100%;max-height:320px;border-radius:8px;object-fit:contain"></div>`;
+  } else {
+    resultBody.innerHTML = `<div style="background:${bgColor};border-radius:8px;width:100%;display:flex;align-items:center;justify-content:center;min-height:240px;padding:8px">
+      <img src="${url}" style="max-width:100%;max-height:320px;border-radius:4px;object-fit:contain"></div>`;
+  }
+}
+
+// ── Background color swatches ─────────────────────────────────────────────────
+document.querySelectorAll('.color-swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    currentBgColor = sw.dataset.color;
+    if (resultBlob) renderResult(URL.createObjectURL(resultBlob), currentBgColor);
+  });
+});
+
+document.getElementById('customColor').addEventListener('input', e => {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  currentBgColor = e.target.value;
+  if (resultBlob) renderResult(URL.createObjectURL(resultBlob), currentBgColor);
+});
+
+// ── Download ──────────────────────────────────────────────────────────────────
+downloadBtn.addEventListener('click', () => {
+  if (!resultBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(resultBlob);
+  a.download = 'removed-bg.png';
+  a.click();
+});
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+resetBtn.addEventListener('click', () => {
+  currentFile = null; resultBlob = null;
+  fileInput.value = '';
+  previewArea.classList.remove('visible');
+  actions.classList.remove('visible');
+  bgOptions.classList.remove('visible');
+  hideStatus();
+});
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function showStatus(type, msg) {
+  statusBar.textContent = msg;
+  statusBar.className = `status-bar visible ${type}`;
+}
+function hideStatus() {
+  statusBar.className = 'status-bar';
+}
+</script>
+</body>
+</html>
